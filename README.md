@@ -1,199 +1,202 @@
-# LILA BLACK — Player Journey Visualization Tool
+# Lila Games — Game Data & Analytics Visualizer
 
-> A browser-based replay and heat-map tool for level designers to explore player behavior on game maps.
-> Filter by date, map, and match. Scrub a timeline. Toggle bots. Switch between path view, kill zones, and traffic density.
+> An interactive, browser-based analytics dashboard and heat-map visualization tool. Designed specifically for level designers and game developers to monitor, explore, and analyze player behavior across various game maps.
+> Filter sessions by date, map, and specific match IDs. Play back events on a dynamic timeline. Toggle between human and bot data, and visualize player paths, kill zones, and high-traffic areas via heat-maps.
 
-**Live demo:** *(Deploy URL goes here — see [Deployment](#deployment) section below)*
+**Live Demo:** *(Add your deployment URL here)*
 
 ---
 
-## Tech Stack
+## 🛠️ Technology Stack
 
-| Layer | Technology | Purpose |
+| Component | Tech Used | Description |
 |---|---|---|
-| **Frontend** | React 19 + Vite 8 | Fast dev server, JSX-based UI |
-| **Map rendering** | Leaflet.js + react-leaflet | `CRS.Simple` turns game minimaps into zoomable/pannable canvases with heat-layer support |
-| **Data pipeline** | Python 3 + PyArrow | Reads `.nakama-0` parquet files, converts coords, groups by match, writes JSON |
-| **Server** | Express.js | Serves the built SPA + `/output/` JSON tree + `/minimaps/` images from one Node process |
-| **Containerisation** | Docker (node:20-alpine) | One-command deploy to Render, Railway, Fly.io, or any Docker host |
+| **Frontend** | React 19 + Vite 8 | Fast, modern development server with a JSX-driven user interface. |
+| **Mapping Engine** | Leaflet.js + react-leaflet | Uses `CRS.Simple` to transform static 2D minimaps into fully zoomable/pannable canvases, complete with heatmap layers. |
+| **Data Processing** | Python 3 + PyArrow | Parses `.nakama-0` parquet logs, normalizes coordinates, organizes data by match, and outputs structured JSON. |
+| **Backend API** | Express.js | A lightweight server that serves the production SPA, the generated JSON data tree (`/output/`), and minimap assets (`/minimaps/`). |
+| **Deployment** | Docker (node:20-alpine) | Containerized for seamless, one-command deployments across platforms like Render, Railway, and Fly.io. |
 
 ---
 
-## Quick Start
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- **Node.js 20+** (for frontend & server)
-- **Python 3.8+** with `pyarrow` (only needed if re-processing raw data)
+- **Node.js 20+** (Required for the frontend application and backend server)
+- **Python 3.8+** with `pyarrow` (Only required if you plan on reprocessing the raw parquet data)
 
-### 1. Install & run in dev mode
+### 1. Local Development Mode
 
 ```bash
-# Navigate to project directory
+# Clone and enter the repository
 cd Lila-game
 
-# Install root (Express) dependencies
+# Install the backend server dependencies
 npm install
 
-# Start the Vite dev server (frontend only)
+# Start the Vite development server (frontend)
 npm run dev
-# → http://localhost:5173
+# → Application available at: http://localhost:5173
 ```
 
-> The dev server proxies `/output/` and `/minimaps/` from `frontend/public/`, so no separate backend is needed during development.
+> **Note:** The Vite dev server automatically proxies requests for `/output/` and `/minimaps/` from `frontend/public/`, meaning you don't need to run the Express backend separately during UI development.
 
-### 2. Build for production
+### 2. Production Build
 
 ```bash
-# Builds the React app into frontend/dist/
+# Compile the React application into frontend/dist/
 npm run build
 
-# Start the Express server (serves built SPA + data)
+# Start the production Express server (serves the SPA and data)
 npm start
-# → http://localhost:10000
+# → Application available at: http://localhost:10000
 ```
 
-### 3. Docker (optional)
+### 3. Docker Deployment (Optional)
 
 ```bash
+# Build the Docker image
 docker build -t lila-black .
+
+# Run the container
 docker run -p 10000:10000 lila-black
-# → http://localhost:10000
+# → Application available at: http://localhost:10000
 ```
 
 ---
 
-## Environment Variables
+## ⚙️ Environment Configuration
 
-**None required.** All data is preprocessed and bundled statically.
+**No strict environment variables are required.** The application uses preprocessed static data bundles.
 
-If you self-host and want to change the port:
+If you choose to self-host and wish to modify the default port, you can use:
 
-| Variable | Default | Description |
+| Variable | Default Value | Description |
 |---|---|---|
-| `PORT` | `10000` | Port the Express server listens on |
+| `PORT` | `10000` | The port the Express.js server will bind to. |
 
 ---
 
-## Data Processing (already done — only needed to reprocess)
+## 📊 Data Pipeline (Optional)
 
-The processed data is already in `frontend/public/output/`. To rebuild from raw parquet:
+The raw telemetry data has already been processed and placed inside `frontend/public/output/`. If you need to recompile the data from raw `.nakama-0` parquet files, follow these steps:
 
 ```bash
-# Install Python dependencies
+# Install the necessary Python packages
 pip install pyarrow
 
-# Step 1: Process raw parquet → per-match JSON
+# Step 1: Parse the raw parquet files and generate per-match JSON data
 python process_data.py
 
-# Step 2: Build match index
+# Step 2: Construct the global match index
 python build_index.py
 
-# Step 3: Copy into frontend public dir (Windows)
+# Step 3 (Windows): Move the output to the frontend directory
 xcopy /E /I output frontend\public\output
 
-# (macOS/Linux)
+# Step 3 (macOS/Linux): Move the output to the frontend directory
 cp -r output/* frontend/public/output/
 ```
 
 ---
 
-## Deployment
+## 🌐 Deployment Guide
 
-### Option A — Render (recommended, free tier available)
+### Option A: Render (Recommended — Free Tier)
 
-1. Go to [render.com](https://render.com) → **New → Web Service**
-2. Connect your repo
-4. Set:
+1. Navigate to [Render](https://render.com) and click **New → Web Service**.
+2. Link your GitHub repository.
+3. Configure the following settings:
    - **Build command:** `npm run build`
    - **Start command:** `npm start`
-   - **Node version:** 20
-5. Click **Deploy** — Render will install deps, build the frontend, and start the server
+   - **Node version:** `20`
+4. Click **Deploy**. Render will handle the dependencies, build the React app, and launch the server.
 
-### Option B — Railway / Fly.io (Docker)
+### Option B: Railway / Fly.io (Docker-based)
 
-Both platforms auto-detect the `Dockerfile`:
+Both of these platforms will automatically detect the provided `Dockerfile`:
 
 ```bash
-# Railway
+# For Railway
 railway up
 
-# Fly.io
+# For Fly.io
 fly launch
 fly deploy
 ```
 
-### Option C — Vercel (frontend only)
+### Option C: Vercel (Frontend Only)
 
-If you only want the UI on Vercel and don't need the `/output/` data served dynamically:
+If you strictly want to host the user interface on Vercel and handle data elsewhere:
 
 ```bash
 cd frontend
 vercel deploy --prod
 ```
 
-> You'll need to host the `output/` JSON files on an external CDN (S3, Cloudflare R2, etc.) and update the fetch URLs in `App.jsx`.
+> **Warning:** You will need to host your `output/` JSON folder on a CDN (like AWS S3 or Cloudflare R2) and update the fetch paths in `App.jsx`.
 
 ---
 
-## Project Structure
+## 📂 Project Architecture
 
-```
+```text
 Lila-game/
-├── player_data/                # Original parquet data (read-only source)
+├── player_data/                # Raw telemetry data in Parquet format (Read-only)
 │   ├── February_10/            # 437 files (~2.85 MB)
 │   ├── February_11/            # 293 files
 │   ├── February_12/            # 268 files
 │   ├── February_13/            # 166 files
-│   ├── February_14/            # 79 files (partial day)
-│   └── minimaps/               # AmbroseValley, GrandRift, Lockdown map images
-├── output/                     # Processed JSON (checked in, one file per match)
-│   ├── index.json              # Match index with metadata
-│   └── February_*/             # Match JSON files grouped by date
-├── frontend/                   # React application
+│   ├── February_14/            # 79 files (Incomplete dataset)
+│   └── minimaps/               # Source images for AmbroseValley, GrandRift, and Lockdown
+├── output/                     # Compiled JSON telemetry (Checked in, organized by match)
+│   ├── index.json              # Global index and metadata for all matches
+│   └── February_*/             # Daily match data folders
+├── frontend/                   # Main React SPA
 │   ├── src/
-│   │   ├── App.jsx             # Main app: state, filters, playback
-│   │   ├── App.css             # Global styles
+│   │   ├── App.jsx             # Core application logic, filters, and timeline state
+│   │   ├── App.css             # Root stylesheet
 │   │   ├── components/
-│   │   │   ├── MapViewer.jsx   # Leaflet map, paths, markers, heat-maps
-│   │   │   ├── FilterPanel.jsx # Date / map / match selectors
-│   │   │   ├── TimelineSlider.jsx # Scrub bar
-│   │   │   └── Legend.jsx      # Event legend
+│   │   │   ├── MapViewer.jsx   # Leaflet map instance, pathing, and heat-map layers
+│   │   │   ├── FilterPanel.jsx # Dropdowns for Date, Map, and Match selection
+│   │   │   ├── TimelineSlider.jsx # Interactive playback scrubber
+│   │   │   └── Legend.jsx      # Visual key for map markers
 │   │   └── main.jsx
 │   └── public/
-│       ├── output/             # Symlinked / copied match JSON
-│       └── minimaps/           # Symlinked / copied minimap images
-├── process_data.py             # Parquet → JSON pipeline
-├── build_index.py              # Builds output/index.json
-├── server.js                   # Express server (prod)
-├── Dockerfile                  # Docker image definition
-├── ARCHITECTURE.md             # Architecture & design decisions
-└── INSIGHTS.md                 # Game insights from the data
+│       ├── output/             # Link/Copy of the processed JSON
+│       └── minimaps/           # Link/Copy of the minimap images
+├── process_data.py             # Python script: Parquet → JSON conversion
+├── build_index.py              # Python script: Generates output/index.json
+├── server.js                   # Node.js/Express production server
+├── Dockerfile                  # Instructions for containerization
+├── ARCHITECTURE.md             # In-depth architectural decisions
+└── INSIGHTS.md                 # Level design insights derived from the dataset
 ```
 
 ---
 
-## Features
+## 🎨 Features & Color Codes
 
-| Feature | Description |
-|---|---|
-| **Map overlay** | Real minimap images for all 3 maps |
-| **Player paths** | Solid colored lines for humans, dotted grey for bots |
-| **Event markers** | 💀 Kill (red), 💀 Death (purple), ⚡ Storm kill (magenta), 📦 Loot (gold) |
-| **Timeline playback** | Play/pause with 0.25×, 0.5×, 1×, 1.5× speed |
-| **Filtering** | By date (Feb 10–14), map, and individual match |
-| **Human/Bot toggle** | Show/hide each population independently |
-| **Heat-maps** | Kill density, death density, traffic density overlays |
-| **Match stats** | Human/bot player counts shown in footer |
+| Feature | Description | Color Code / Hex |
+|---|---|---|
+| **Map Base Overlays** | High-fidelity minimap images for all 3 supported levels. | N/A |
+| **Human Player Paths** | Solid colored traversal lines. | <span style="color:#007BFF;font-weight:bold;">#007BFF (Blue)</span> |
+| **Bot Player Paths** | Dotted lines indicating AI movement. | <span style="color:#6C757D;font-weight:bold;">#6C757D (Grey)</span> |
+| **Kill Events** | 💀 Marks locations of successful eliminations. | <span style="color:#FF0000;font-weight:bold;">#FF0000 (Red)</span> |
+| **Death Events** | 💀 Marks locations where a player died. | <span style="color:#800080;font-weight:bold;">#800080 (Purple)</span> |
+| **Storm Kills** | ⚡ Eliminations caused by the map's storm mechanic. | <span style="color:#FF00FF;font-weight:bold;">#FF00FF (Magenta)</span> |
+| **Loot Events** | 📦 Interaction locations with loot boxes. | <span style="color:#FFD700;font-weight:bold;">#FFD700 (Gold)</span> |
+| **Heat-maps** | Aggregated visual density of kills, deaths, and general foot traffic. | Thermal Gradient |
 
 ---
 
-## Data Notes
+## 📝 Important Notes
 
-- Raw files are Apache Parquet despite the `.nakama-0` extension — any parquet reader works
-- `ts` timestamps represent **time within the match**, not wall-clock time
-- Bot detection: numeric `user_id` (e.g., `1440`) = bot; UUID = human
-- `y` column in parquet is elevation — ignored for 2D mapping (use `x` and `z` only)
-- February 14 is a **partial day** (data collection still ongoing)
-- See [ARCHITECTURE.md](ARCHITECTURE.md) for coordinate mapping formula
-- See [INSIGHTS.md](INSIGHTS.md) for data-backed level design recommendations
+- **File Formats:** Despite the `.nakama-0` file extension, the raw telemetry logs are standard **Apache Parquet** files and can be read by any compliant parquet parser.
+- **Timestamps:** The `ts` field represents relative **time elapsed within the match**, not absolute real-world time.
+- **Entity Identification:** Bots are assigned numeric `user_id`s (e.g., `1440`), whereas Human players are assigned standard UUID strings.
+- **Elevation Data:** The `y` column represents elevation but is currently ignored for the 2D mapping visualizations. (Only `x` and `z` are rendered).
+- **Data Completeness:** The data for February 14th represents a **partial day**.
+- **Coordinate Math:** For detailed information on how game coordinates translate to map pixels, refer to the [ARCHITECTURE.md](ARCHITECTURE.md) document.
+- **Design Takeaways:** Review the [INSIGHTS.md](INSIGHTS.md) document for data-driven recommendations on map flow and chokepoints.
