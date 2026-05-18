@@ -3,7 +3,7 @@
 > An interactive, browser-based analytics dashboard and heat-map visualization tool. Designed specifically for level designers and game developers to monitor, explore, and analyze player behavior across various game maps.
 > Filter sessions by date, map, and specific match IDs. Play back events on a dynamic timeline. Toggle between human and bot data, and visualize player paths, kill zones, and high-traffic areas via heat-maps.
 
-**Live Demo:** *(Add your deployment URL here)*
+**Live Demo:** [https://lila-games-1.onrender.com](https://lila-games-1.onrender.com)
 
 ---
 
