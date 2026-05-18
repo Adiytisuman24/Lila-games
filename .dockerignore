@@ -1,0 +1,4 @@
+node_modules
+.git
+frontend/node_modules
+*.log
