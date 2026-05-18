@@ -1,85 +1,85 @@
-# LILA BLACK – Match Viewer: Architecture
+# Lila Games — System Architecture Overview
 
-> One-page architecture overview for the Player Journey Visualization Tool.
+> A concise technical reference covering the core design decisions, data flow, coordinate system, and deployment strategy behind the Player Journey Visualization Tool.
 
 ---
 
-## What We Built and Why
+## What This Project Does and Why
 
-A **browser-based replay & heat-map tool** that lets level designers scrub through actual player sessions on a live minimap — filtering by date, map, and match, toggling bots on/off, and switching between path view and kill/death/traffic heat-maps.
+A **browser-based replay and heat-map analytics tool** that allows level designers to scrub through real player sessions overlaid on live minimaps. Users can filter by date, map, and match ID, toggle bot visibility on/off, and switch between player path view and kill/death/traffic heat-map modes.
 
-### Tech Choices
+### Technology Decisions
 
-| Layer | Choice | Why |
+| Layer | Technology | Rationale |
 |---|---|---|
-| **Frontend framework** | React + Vite | Fast HMR during iteration; JSX makes the filter/stats UI easy to reason about |
-| **Map rendering** | Leaflet.js + react-leaflet | `CRS.Simple` mode turns any image into a zoomable, pannable canvas — perfect for game minimaps. It has a `heatLayer` plugin that works out of the box. No WebGL required. |
-| **Data format** | Pre-processed JSON (one file per match) | Designers want instant loads. Serving parquet to the browser would need a WASM runtime and still be slower. Pre-processing in Python lets us compute pixel coords once, keeping the browser as a pure renderer. |
-| **Data pipeline** | Python + PyArrow | PyArrow reads the `.nakama-0` parquet files natively, even without a `.parquet` extension. No pandas dependency needed. |
-| **Server** | Express.js | Serves the React SPA, the `/output/` JSON tree, and the `/minimaps/` images through a single Node process. Trivially deployable on Render, Railway, Fly, or Docker. |
-| **Deployment** | Render (Docker / Node Web Service) | The processed JSON data lives in the repo, so there is no external database or blob store required. A single container handles everything. |
+| **Frontend Framework** | React + Vite | Fast hot-module reloading during development; JSX makes the filter/stats UI intuitive and easy to reason about. |
+| **Map Rendering** | Leaflet.js + react-leaflet | `CRS.Simple` mode converts any image into a fully zoomable, pannable canvas — perfect for game minimaps. The `leaflet.heat` plugin integrates seamlessly. No WebGL dependency required. |
+| **Data Format** | Pre-processed JSON (one file per match) | Designers need instant data loads. Serving raw parquet to the browser would require a WASM runtime and introduce latency. Pre-processing in Python computes pixel coordinates once, keeping the browser as a pure, stateless renderer. |
+| **Data Pipeline** | Python + PyArrow | PyArrow reads `.nakama-0` parquet files natively without requiring a `.parquet` extension. No pandas dependency needed, keeping the environment lean. |
+| **Server** | Express.js | A single Node process serves the React SPA, the `/output/` JSON tree, and the `/minimaps/` image assets. Trivially deployable on Render, Railway, Fly.io, or any Docker host. |
+| **Deployment** | Render / Docker | Processed JSON data lives directly in the repository — no external database or blob storage required. One container handles the full stack. |
 
 ---
 
-## Data Flow — Parquet Files → Screen
+## Data Flow — From Parquet Files to the Screen
 
 ```
 player_data/
-└──February_10..14/
-   └── {user_id}_{match_id}.nakama-0   ← raw parquet, one file per player-session
+└── February_10..14/
+   └── {user_id}_{match_id}.nakama-0   ← Raw parquet, one file per player session
          │
          ▼
    process_data.py
    ┌──────────────────────────────────────────┐
    │  1. pq.read_table(file)                  │
-   │  2. decode event column (bytes → str)    │
-   │  3. classify human vs bot (UUID check)   │
-   │  4. world (x,z) → pixel (px, py)         │
-   │  5. convert ts → match-relative ms       │
-   │  6. group all players by match_id        │
-   │  7. write output/{day}/{match_id}.json   │
+   │  2. Decode event column (bytes → string) │
+   │  3. Classify human vs bot (UUID check)   │
+   │  4. Map world (x,z) → pixel (px, py)     │
+   │  5. Convert ts → match-relative ms       │
+   │  6. Group all players by match_id        │
+   │  7. Write output/{day}/{match_id}.json   │
    └──────────────────────────────────────────┘
          │
          ▼
    build_index.py  →  output/index.json
-   (match metadata: map, date, player counts)
+   (Match metadata: map, date, player counts)
          │
          ▼  (npm run build)
-   frontend/public/output/  ← copied into Vite's public dir
+   frontend/public/output/  ← Data copied into Vite's public directory
          │
          ▼  Browser
-   App.jsx  →  GET /output/index.json       (on mount)
-            →  GET /output/{date}/{id}.json  (on match select)
+   App.jsx  →  GET /output/index.json         (on initial mount)
+            →  GET /output/{date}/{id}.json   (on match selection)
          │
          ▼
    MapViewer.jsx
    ┌─────────────────────────────────────────┐
    │  Leaflet CRS.Simple + ImageOverlay      │
    │  Polylines  (player paths, time-gated)  │
-   │  Marker     (kill/death/loot icons)     │
+   │  Markers    (kill/death/loot icons)     │
    │  heatLayer  (kill/death/traffic modes)  │
    └─────────────────────────────────────────┘
 ```
 
 ---
 
-## Coordinate Mapping — The Tricky Part
+## Coordinate Mapping — Converting Game Space to Screen Space
 
-The minimap images are 1024×1024 pixels. World coordinates use a 3-D axis where `y` is elevation — irrelevant for a top-down view. Only `x` (east-west) and `z` (north-south) matter.
+The minimap images are **1024×1024 pixels**. Game world coordinates use a 3D axis where `y` represents elevation — irrelevant for this top-down tool. Only `x` (east-west) and `z` (north-south) are used.
 
-### Formula
+### The Formula
 
 ```
-u  = (world_x - origin_x) / scale        # 0..1 across the map width
-v  = (world_z - origin_z) / scale        # 0..1 across the map depth
+u  = (world_x - origin_x) / scale       # Normalized 0..1 across map width
+v  = (world_z - origin_z) / scale       # Normalized 0..1 across map depth
 
 pixel_x = u * 1024
-pixel_y = (1 - v) * 1024                 # ← Y is FLIPPED
+pixel_y = (1 - v) * 1024               # ← Y-axis is FLIPPED
 ```
 
-**Why the Y-flip?** Image coordinates have `(0,0)` at the top-left. Game world coordinates have z increasing "upward" visually. Without the flip, north becomes south on the minimap.
+**Why the Y-flip?** Image coordinates place `(0,0)` at the top-left corner. Game world coordinates have `z` increasing visually "upward". Without this inversion, north becomes south on the rendered minimap.
 
-### Map Constants (from README spec)
+### Map Configuration Constants
 
 | Map | `scale` | `origin_x` | `origin_z` |
 |---|---|---|---|
@@ -87,47 +87,46 @@ pixel_y = (1 - v) * 1024                 # ← Y is FLIPPED
 | GrandRift | 581 | −290 | −290 |
 | Lockdown | 1000 | −500 | −500 |
 
-### Verification
+### Worked Verification Example
 
-The README provides a worked example:
 ```
-World: x = -301.45, z = -355.55  (AmbroseValley)
+World coords:  x = -301.45,  z = -355.55  (AmbroseValley)
 u = (-301.45 − (−370)) / 900 = 0.0762  →  pixel_x = 78
 v = (-355.55 − (−473)) / 900 = 0.1305  →  pixel_y = (1 − 0.1305) × 1024 = 890
+Result: (78, 890) ✓
 ```
-Our implementation matches this exactly — validated at import time.
 
-In the frontend, Leaflet's `CRS.Simple` treats `[lat, lng]` as `[y, x]` on screen. So every marker and polyline point is passed as `[pixel_y, pixel_x]` — matching Leaflet's row-major convention without any additional transforms.
-
----
-
-## Assumptions Made Where Data Was Ambiguous
-
-### 1. Timestamps represent match-relative time, not wall-clock time
-Raw `ts` values look like `1970-01-21 11:52:36.501000` (Unix epoch + ~21 days). The date component is meaningless — what matters is the intra-match ordering. We convert to "milliseconds since midnight" (`hour×3600000 + …`), then normalise each match to a 0–100% scale for the timeline slider. This way the playback speed is consistent regardless of absolute match length.
-
-### 2. Human vs. Bot detection by `user_id` format
-The README confirms: UUIDs (containing `-`, length >10) are human players; short numeric IDs like `1440` are bots. We apply this check at processing time and bake an `is_bot` boolean into every JSON player object.
-
-### 3. One JSON file = one match (all players combined)
-Raw data is one parquet file per player per match. We group by `match_id` during processing so the frontend fetches a single JSON and gets every player's journey — humans and bots — in one round-trip.
-
-### 4. The `.nakama-0` suffix is a server-instance tag, not meaningful data
-We strip it when writing output filenames (e.g., `b71aaad8-aa62-4b3a-8534-927d4de18f22.json`) and when fetching from the frontend.
-
-### 5. `y` (elevation) is ignored
-The data includes a `y` column (height in the 3D world). For this 2D top-down tool we discard it — a future "elevation profile" view could use it.
+In the frontend, Leaflet's `CRS.Simple` treats `[lat, lng]` as `[y, x]` on screen. Every marker and polyline point is therefore passed as `[pixel_y, pixel_x]` — aligned with Leaflet's row-major coordinate convention.
 
 ---
 
-## Major Tradeoffs
+## Design Assumptions (Where Data Was Ambiguous)
 
-| Decision | We Chose | vs. | Why |
+### 1. Timestamps Are Match-Relative, Not Wall-Clock
+Raw `ts` values resemble `1970-01-21 11:52:36.501` (Unix epoch + ~21 days). The date portion is meaningless — only intra-match ordering matters. Values are converted to "milliseconds since midnight" and then normalized per-match to a 0–100% scale for the timeline slider, ensuring consistent playback speed across all matches regardless of absolute duration.
+
+### 2. Human vs. Bot Detection via `user_id` Format
+UUIDs (containing `-`, length > 10) are human players. Short numeric IDs like `1440` are bots. This classification is applied at processing time and baked in as an `is_bot` boolean on every JSON player object.
+
+### 3. One JSON File = One Complete Match
+Raw data is one parquet file per player, per match. All player files sharing the same `match_id` are merged during processing. The browser fetches a single JSON and receives every player's complete journey — both humans and bots — in one round-trip.
+
+### 4. The `.nakama-0` Suffix Is a Server Tag, Not Meaningful Data
+This suffix is stripped when writing output filenames and when constructing fetch URLs in the frontend. Inconsistency here would silently produce 404 errors for certain matches.
+
+### 5. Elevation (`y`) Is Ignored
+The `y` column records 3D world height. It is discarded for this 2D top-down view. A future "elevation profile" mode could leverage this column.
+
+---
+
+## Key Tradeoffs
+
+| Decision | Chosen Approach | Alternative Considered | Reasoning |
 |---|---|---|---|
-| **Data format** | Pre-processed JSON served statically | Live parquet query (DuckDB WASM) | Static JSON is instant; WASM adds ~1.5 MB bundle and cold-parse latency |
-| **Map library** | Leaflet + `CRS.Simple` | Canvas / WebGL (PixiJS, deck.gl) | Leaflet handles zoom/pan/interactions for free; no GPU required; designers can run it on any machine |
-| **Heat-map** | `leaflet.heat` (density gradient) | Grid-cell counts | Gradient is more intuitive for spatial hotspot reading; grid requires tuning cell size |
-| **Timeline** | 0–100% normalised slider | Real-time clock (minutes:seconds) | Raw timestamps span only ~300–800 ms per player file (not real game time); normalising makes playback consistent across all matches |
-| **Bot display** | Same coordinate system, dotted lines | Separate layer / panel | Keeping bots on the main map lets designers immediately see how bot density affects lane pressure and safe zones |
-| **Data volume** | Keep all position events | Downsample to every 2s | We opted to keep all events after testing — downsampling discarded path detail valuable for fine-grained movement analysis |
-| **Deployment** | Single Express server (frontend + data) | Separate static host + CDN | Simpler ops for an internal tool; the data directory (~5 MB) fits comfortably in a free Render instance |
+| **Data format** | Pre-processed static JSON | Live parquet query via DuckDB WASM | Static JSON loads instantly; WASM adds ~1.5 MB bundle size and cold-parse latency |
+| **Map library** | Leaflet + `CRS.Simple` | Canvas / WebGL (PixiJS, deck.gl) | Leaflet provides zoom, pan, and interaction for free; no GPU required; runs on any machine |
+| **Heat-map** | `leaflet.heat` density gradient | Grid-cell count visualization | Gradients are more intuitive for spatial hotspot reading; grid requires manual cell-size tuning |
+| **Timeline** | 0–100% normalized slider | Real-time clock display (mm:ss) | Raw timestamps span only ~300–800 ms per player file (not real game time); normalizing ensures consistent playback across all matches |
+| **Bot display** | Same canvas, dashed grey lines | Separate layer or side panel | Keeping bots on the main map lets designers immediately see how bot density influences lane pressure and safe zones |
+| **Data density** | All position events retained | Downsampled to every 2 seconds | Downsampling discarded path detail valuable for fine-grained movement analysis |
+| **Deployment** | Single Express server (SPA + data) | Separate static host + CDN | Simpler operations for an internal tool; the data directory (~5 MB) fits comfortably on a free Render instance |
